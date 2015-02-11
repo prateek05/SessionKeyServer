@@ -341,8 +341,10 @@ class SKSHandler implements HttpHandler {
 		} else if (requestPath.equals("/pam_token")) {
 		    String user = queryMap.get("user");
 		    String pwd = queryMap.get("pwd");
+		    String moduledefault = "login";
+		    String module = queryMap.get("module") == null ? moduledefault : queryMap.get("module");
 		    boolean succ = false;
-		    if (com.att.research.RCloud.PAM.checkUser(realm_txt, user, pwd)) {
+		    if (com.att.research.RCloud.PAM.checkUser(module, user, pwd)) {
 			md.update(java.util.UUID.randomUUID().toString().getBytes());
 			md.update(java.util.UUID.randomUUID().toString().getBytes());
 			String sha1 = bytes2hex(md.digest());
@@ -356,11 +358,24 @@ class SKSHandler implements HttpHandler {
                         exchange.close();
 		    }
 		    System.out.println("PAM: "+((new Date()).getTime())+" user='"+user+"', "+realm_txt+", "+(succ?"OK":"FAILED"));
-		} else {
-		    exchange.sendResponseHeaders(404, -1);
-		    exchange.close();
-		    return;
-		}
+		} else if (requestPath.equals("/krb5_token")) {
+			String user = queryMap.get("user");
+			char[] pwd = queryMap.get("pwd").toCharArray();
+			boolean succ = false;
+		    if (com.att.research.RCloud.KerberosAuth.KerberosAuthenticate(user,pwd)) {
+			md.update(java.util.UUID.randomUUID().toString().getBytes());
+			md.update(java.util.UUID.randomUUID().toString().getBytes());
+			String sha1 = bytes2hex(md.digest());
+			SessionKeyServer.ks.put("t:" + realm + ":" + sha1, user + "\nkrb5\n");
+			SessionKeyServer.ks.put("ut:" + realm + ":" + user, sha1);
+			respond(exchange, 200, sha1 + "\n" + user + "\nkrb5\n");
+			exchange.close();
+			succ = true;
+		    } else {
+			exchange.sendResponseHeaders(403, -1);
+                        exchange.close();
+		    }
+			System.out.println("KRB5: "+((new Date()).getTime())+" user='"+user+"', "+realm_txt+", "+(succ?"OK":"FAILED"));
 	    } else {
 		respond(exchange, 404, "Unknown path");
 		exchange.close();
@@ -374,3 +389,4 @@ class SKSHandler implements HttpHandler {
 	}
     }
 }
+
